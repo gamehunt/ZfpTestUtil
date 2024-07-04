@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <fstream>
 
 #include "zfp.h"
 #include "zfp/constarray1.hpp"
@@ -10,6 +11,7 @@ struct app_config{
 	int  elements = 256;
 	bool simplified_output = false;
 	bool verbose = false;
+	const char* data_path = "\0";
 	zfp_config compression_config = {
 		.mode = zfp_mode_fixed_rate,
 		.arg = {.rate = -4.0}
@@ -17,13 +19,14 @@ struct app_config{
 };
 
 void usage() {
-	std::cout << "zfp_test [-s] [-h] [-n <amount>] [-m <expert|rate|precision|accuracy>] [-r <rate>] [-p <precision>] [-t <tolerance>] [-e <maxprec> <minbits> <maxbits> <minexp>]\n"
+	std::cout << "zfp_test [-s] [-h] [-n <amount> ] [-d <file>] [-m <expert|rate|precision|accuracy>] [-r <rate>] [-p <precision>] [-t <tolerance>] [-e <maxprec> <minbits> <maxbits> <minexp>]\n"
 	<< "-h - Print this message and exit\n"
 	<< "-s - Enable simplified output (print data as space-separated stream)\n"
 	<< "-v - Enable verbose output (print each element)\n"
 	<< "-n - Specify amount of elements in test arrays\n"
 	<< "-m - Set compression mode\n"
 	<< "-r -p -t -e - Set arguments for compression mode\n" 
+	<< "-d - Specify file with test data\n"
 	<< "\nDefault prompt (no arguments provided): zfp_test -n 256 -m rate -r 4.0"
 	<< std::endl;
 }
@@ -80,6 +83,9 @@ std::unique_ptr<app_config> parse_config(int argc, const char** argv) {
 				case 'v':
 					cfg->verbose = true;
 					break;
+				case 'd': with_arg
+					cfg->data_path = next; 
+					break;
 				case 'n': with_arg
 					cfg->elements = atoi(next);
 					break;
@@ -118,15 +124,31 @@ std::unique_ptr<app_config> parse_config(int argc, const char** argv) {
 int main(int argc, const char** argv) {
 	auto cfg = parse_config(argc, argv);
 
+
 	int n = cfg->elements;
 
 	std::vector<double> data_original(n);
 
-	srand(time(0));
-
-	for(int i = 0; i < n; i++) {
-		data_original[i] = (double) rand() / RAND_MAX * i;
+	if(cfg->data_path[0] == '\0') {
+		srand(time(0));
+		for(int i = 0; i < cfg->elements; i++) {
+			data_original[i] = (double) rand() / RAND_MAX * i;
+		}
+	} else {
+		std::ifstream file(cfg->data_path);
+		if(!file.is_open()) {
+			std::cout << "Failed to open data file.\n";
+			exit(2);
+		}
+		
+		double v;
+		int i = 0;
+		while(file >> v) {
+			data_original[i] = v;
+			i++;
+		}
 	}
+
 
 	zfp::const_array1<double> data_compressed(n, cfg->compression_config, data_original.data());
 
